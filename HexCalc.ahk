@@ -6,6 +6,7 @@
 
 
 #SingleInstance force		; Automatically restart if relaunched
+#NoTrayIcon
 #NoEnv						; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input				; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%	; Ensures a consistent starting directory.
@@ -17,9 +18,6 @@ SetWorkingDir %A_ScriptDir%	; Ensures a consistent starting directory.
 ;; Import GroupBox creation function
 #Include %A_ScriptDir%\GroupBox.ahk
 
-;; Set TRAY icon to something a little more appropriate (Looks like a card reader)
-Menu, Tray, Icon, Shell32.dll, 193
-
 If !A_IsCompiled ; If the program is compiled, skip some checks
 {
 	FileGetTime, ModTime, %A_ScriptFullPath%, M
@@ -29,7 +27,16 @@ If !A_IsCompiled ; If the program is compiled, skip some checks
 	GroupAdd, er, %A_ScriptName%
 	WinClose, ahk_group er
 	SetTitleMatchMode, 1 ; return to default mode (Start With...)
-	;ListLines
+}
+Else
+{
+	;; Splash Screen
+	HexCalcPng := LoadPicture("C:\Users\Adam\Code\Card-Information-Calculator\hexcalc.png")
+	Gui, Splash:New, +ToolWindow, Card Format Tools
+	Gui, Splash:Add, Picture, X12 Y9 W410 H508, HBITMAP:%HexCalcPng%
+	Gui, Splash:Show, W432 H524
+	Sleep 3000
+	Gui, Splash:Destroy
 }
 
 ;; void main(): // Start the program
@@ -62,7 +69,7 @@ HexCalcGui:
 	;; Raw Data field ;;
 	Gui, Add, Text, Section y+11, Raw Data:
 	Gui, Add, Edit, yp-4 xs+96 w238 r1 vRawData Uppercase,
-	Gui, Add, Button, yp x+0 w16 h20 gInvertRawData,!
+	Gui, Add, Button, yp-1 x+1 w18 h23 gInvertRawData,!
 
 	;; Format selection dropdown ;;
 	Gui, Add, Text, yp+30 xs, Format:
@@ -104,10 +111,10 @@ HexCalcGui:
 	;; ToDo: Add Parity Checking
 
 	; Button to calculate the data ;
-	Gui, Add, Button, Default y+10 xs+96 W256 vCICSubmit, Extract Data
+	Gui, Add, Button, Default y+8 xs+95 W258 vCICSubmit, Extract Data
 
 	; Results ;
-	Gui, Add, Text, y+14 xs vCNr, Card Number:
+	Gui, Add, Text, y+8 xs vCNr, Card Number:
 	Gui, Add, Edit, yp-4 xs+96 w246 ReadOnly vCardNumber
 
 	Gui, Add, Text, yp+28 xs vFCr, Facility Code:
@@ -123,7 +130,7 @@ HexCalcGui:
 	Gui, Tab, 2
 	lv_columns := "Raw Data|Card Number|Facility Code|Issue Code|Format"
 	
-	Gui, Add, ListView, W350 H350 ReadOnly, %lv_columns%
+	Gui, Add, ListView, W350 H330 ReadOnly, %lv_columns%
 	LV_ModifyCol(1,131)
 	LV_ModifyCol(2,75)
 	LV_ModifyCol(3,75)
@@ -172,7 +179,9 @@ HexCalcGui:
 
 	GoSub InitializeCardFormats
 	;; Now that the GUI is layed out in memory, show it to the user
-	Gui, Show, AutoSize
+	Gui, CIC:Show, AutoSize
+	
+	;~ OnMessage(0x200, "Help")
 
 	; Initialize the Tabs and the History columns
 	GuiControlGet, CICTabs, POS
@@ -189,6 +198,33 @@ HexCalcGui:
 	GuiControl, Focus, RawData
 	Send {Home}+{End}
 Return ; RealGui
+
+Help(wParam, lParam, Msg) {
+	static prevControl
+	MouseGetPos,,,, OVC ; Originally named: OutputVarControl
+	
+	StringCaseSense, Off
+	Switch OVC
+	{
+		Case "Button1":
+			Help := "Binary Invert:`n`nCheck to see if your data wires are backwards...`nClick this to swap all the zeros and ones in your`nraw card data, as if you swapped data wires.  If the`nCard information calculated below doesn't match`nup with what you expect for your card, try this."
+		Case "Edit1", "Static1":
+			Help := "Please enter the raw card data in Hexidecimal format"
+		Case "Edit3", "Edit6", "Edit9":
+			Help := "This tool treats the first bit as 'Bit 0' instead of 'Bit 1'`nFor example, the default 37-bit format references bits 0 through 36.`nBe wary when coming from tools or systems that use 'Bit 1' as the first bit."
+		Default:
+			;Help := "Control: " . OVC  ; Debug code to show unused control names as ToolTips
+	}
+
+	If prevControl != %OVC% ; Display once and hold.  Prevents continuous refresh which causes multi-line ToolTips to flicker
+	{
+		If (Help = "")  ; To immediately clear the ToolTip when exiting the control
+			ToolTip
+		Sleep 250
+		ToolTip % Help
+	}
+	prevControl := OVC
+}
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -264,12 +300,9 @@ InitializeCardFormats:
 		}
 	} else {
 		MsgBox, Doesn't Exist!  Creating.
-		;FileAppend, , %formatFile%
 		GoSub, CreateDefaultConfigFile
 	}
 
-	; =--
-	*/
 Return
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -426,7 +459,6 @@ CICButtonExtractData:
 		}
 	}
 
-	;msgbox % "IC: " ICStart ":" ICEnd "`nFC: " FCStart ":" FCEnd
 	;; Check that the Issue Code length is valid and doesn't overlap the Facility Code or Card Number
 	If ICLength	{
 		If (ICLength <= 32) ;; Max valid IC length is 32 bits
@@ -533,6 +565,7 @@ Return
 ;;;;;;;;;;;;;;;;;;;;;
 ;; Closing the app ;;
 ;;;;;;;;;;;;;;;;;;;;;
+SplashGuiClose:
 CICGuiClose:
 Gui, Destroy
 ExitApp
